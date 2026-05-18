@@ -1,0 +1,3 @@
+The idea for this project came after a severe 40% Bitcoin market crash. Therefore, I realized the need for a quantitative personal assistant that would not only deepen my understanding of the financial market but also forecast trends to mitigate portfolio risk during similar market downturns.
+
+The foundation of the project relies on a robust data pipeline. Using Python, I engineered an automated script to interface directly with the Binance REST API via HTTP requests. The system extracts 1,000 days of historical market data, specifically pulling the daily OHLCV (Open, High, Low, Close, Volume) metrics, and structures this raw data into a persistent CSV file for subsequent feature engineering.
