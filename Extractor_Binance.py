@@ -2,46 +2,51 @@ import requests
 import csv
 from datetime import datetime
 
-print("Iniciando o programa")
+print("--- Initiating Data Ingestion (Binance API) ---")
 
-# Conectar com a API da Binance
-url_historico = "https://api.binance.com/api/v3/klines"
-parametros = {
+# 1. API Configuration
+binance_url = "https://api.binance.com/api/v3/klines"
+api_params = {
     "symbol": "BTCUSDT",
     "interval": "1d",
     "limit": 1000
 }
 
-resposta = requests.get(url_historico, params=parametros)
-dados_historicos = resposta.json()
+try:
+    # 2. Fetching the Data
+    response = requests.get(binance_url, params=api_params)
+    response.raise_for_status() # Security check: guarantees connection is OK
+    historical_data = response.json()
 
-print(f"Foram descarregados {len(dados_historicos)} dias de histórico do Bitcoin")
+    print(f"SUCCESS: Downloaded {len(historical_data)} days of Bitcoin history.")
+    print("Starting data cleaning and CSV export process...")
 
-# Cria o CSV para armazenar os dados da binance
-print("A iniciar processo de limpeza e gravação em CSV...")
+    # 3. Data Processing and Storage
+    filename = "historico_bitcoin.csv"
 
-nome_ficheiro = "historico_bitcoin.csv"
+    # Open the file in write mode
+    with open(filename, mode='w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
 
-# Abrir o ficheiro em modo de escrita "w"
-with open(nome_ficheiro, mode='w', newline='') as ficheiro_csv:
-    escritor = csv.writer(ficheiro_csv)
+        # Professional English header
+        writer.writerow(['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
 
-    # Escrever o cabeçalho (os nomes das colunas na tabela)
-    escritor.writerow(['Data', 'Abertura', 'Maxima', 'Minima', 'Fecho', 'Volume'])
+        # Process each of the 1000 downloaded days
+        for day in historical_data:
+            # Binance sends timestamp in ms, convert to seconds
+            timestamp_ms = day[0]
+            real_date = datetime.fromtimestamp(timestamp_ms / 1000).strftime('%Y-%m-%d')
 
-    # Processar cada dia dos 1000 descarregados
-    for dia in dados_historicos:
-        # A Binance envia o tempo em milissegundos, converter para segundos (/1000)
-        timestamp_ms = dia[0]
-        data_real = datetime.fromtimestamp(timestamp_ms / 1000).strftime('%Y-%m-%d')
+            open_price = float(day[1])
+            high_price = float(day[2])
+            low_price = float(day[3])
+            close_price = float(day[4])
+            volume = float(day[5])
 
-        abertura = dia[1]
-        maxima = dia[2]
-        minima = dia[3]
-        fecho = dia[4]
-        volume = dia[5]
+            # Write the clean row to our file
+            writer.writerow([real_date, open_price, high_price, low_price, close_price, volume])
 
-        # Escrever a linha limpa no nosso ficheiro
-        escritor.writerow([data_real, abertura, maxima, minima, fecho, volume])
+    print(f"BINGO! File '{filename}' successfully created and populated.")
 
-print(f"BINGO! Ficheiro '{nome_ficheiro}' criado com sucesso na sua pasta.")
+except Exception as e:
+    print(f"CRITICAL ERROR: Failed to fetch data from Binance. Details: {e}")

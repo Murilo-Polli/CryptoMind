@@ -1,48 +1,51 @@
 import pandas as pd
 
-print("--- A carregar o Cérebro Analítico (Pandas) V2.0 ---")
+print("--- Loading Analytical Engine (Pandas) V2.0 ---")
 
-# 1. Carregar o nosso ficheiro CSV bruto
-nome_ficheiro = "historico_bitcoin.csv"
-tabela_btc = pd.read_csv(nome_ficheiro)
+# 1. Load the raw CSV file
+filename = "historico_bitcoin.csv"
+btc_df = pd.read_csv(filename)
 
-# 2. Garantir que tudo é número (float)
-for col in ['Abertura', 'Maxima', 'Minima', 'Fecho', 'Volume']:
-    tabela_btc[col] = tabela_btc[col].astype(float)
+# 2. Ensure numerical format (float) for price and volume columns
+for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+    btc_df[col] = btc_df[col].astype(float)
 
-# 3. Médias Móveis Clássicas
-tabela_btc['MM7'] = tabela_btc['Fecho'].rolling(window=7).mean()
-tabela_btc['MM30'] = tabela_btc['Fecho'].rolling(window=30).mean()
-
-# ====================================================================
-# 4. ENGENHARIA DE FEATURES AVANÇADA (O Segredo de Wall Street)
-# ====================================================================
-print("A injetar cálculos de Força, Volatilidade e Momentum...")
-
-# Feature 1: Retorno Diário (Quanto % subiu ou caiu hoje face à abertura?)
-tabela_btc['Retorno_Diario'] = (tabela_btc['Fecho'] - tabela_btc['Abertura']) / tabela_btc['Abertura']
-
-# Feature 2: Amplitude / Volatilidade (Quão louco foi o dia?)
-tabela_btc['Amplitude'] = (tabela_btc['Maxima'] - tabela_btc['Minima']) / tabela_btc['Abertura']
-
-# Feature 3: Distância para as Médias (O preço está muito "esticado" ou muito abaixo do normal?)
-tabela_btc['Distancia_MM7'] = (tabela_btc['Fecho'] - tabela_btc['MM7']) / tabela_btc['MM7']
-tabela_btc['Distancia_MM30'] = (tabela_btc['Fecho'] - tabela_btc['MM30']) / tabela_btc['MM30']
-
-# Feature 4: Momentum do Volume (O volume de negociação está a aumentar?)
-tabela_btc['Volume_MM7'] = tabela_btc['Volume'].rolling(window=7).mean()
-tabela_btc['Distancia_Volume'] = (tabela_btc['Volume'] - tabela_btc['Volume_MM7']) / tabela_btc['Volume_MM7']
+# 3. Classic Moving Averages
+btc_df['MA7'] = btc_df['Close'].rolling(window=7).mean()
+btc_df['MA30'] = btc_df['Close'].rolling(window=30).mean()
 
 # ====================================================================
+# 4. ADVANCED FEATURE ENGINEERING (The Wall Street Edge)
+# ====================================================================
+print("Injecting Strength, Volatility, and Momentum metrics...")
 
-# 5. O Rótulo (Target)
-tabela_btc['Fecho_Amanha'] = tabela_btc['Fecho'].shift(-1)
-tabela_btc['Alvo'] = (tabela_btc['Fecho_Amanha'] > tabela_btc['Fecho']).astype(int)
+# Feature 1: Daily Return (% change from Open to Close)
+btc_df['Daily_Return'] = (btc_df['Close'] - btc_df['Open']) / btc_df['Open']
 
-# Limpar dados vazios causados pelos cálculos das médias (apagamos os primeiros 30 dias)
-tabela_btc = tabela_btc.dropna()
+# Feature 2: Volatility / Amplitude (How wild was the daily swing?)
+btc_df['Volatility_Amplitude'] = (btc_df['High'] - btc_df['Low']) / btc_df['Open']
 
-# 6. Guardar a tabela rica em matemática
-ficheiro_final = "dados_preparados_btc.csv"
-tabela_btc.to_csv(ficheiro_final, index=False)
-print(f"\nFase 2 (V2) Concluída! Base de dados matemática '{ficheiro_final}' gerada com sucesso.")
+# Feature 3: Distance from MAs (Is the price overextended?)
+btc_df['Dist_MA7'] = (btc_df['Close'] - btc_df['MA7']) / btc_df['MA7']
+btc_df['Dist_MA30'] = (btc_df['Close'] - btc_df['MA30']) / btc_df['MA30']
+
+# Feature 4: Volume Momentum (Is trading activity surging?)
+btc_df['Volume_MA7'] = btc_df['Volume'].rolling(window=7).mean()
+btc_df['Volume_Momentum'] = (btc_df['Volume'] - btc_df['Volume_MA7']) / btc_df['Volume_MA7']
+
+# ====================================================================
+
+# 5. The Target Label (Machine Learning Objective)
+# Shift closing price backwards by 1 to get tomorrow's close on today's row
+btc_df['Next_Day_Close'] = btc_df['Close'].shift(-1)
+# 1 if tomorrow's close is higher than today's (UP), else 0 (DOWN)
+btc_df['Target'] = (btc_df['Next_Day_Close'] > btc_df['Close']).astype(int)
+
+# Clean missing data caused by moving average windows (drops the first 30 days)
+btc_df = btc_df.dropna()
+
+# 6. Save the mathematically enriched dataset
+final_filename = "dados_preparados_btc.csv"
+btc_df.to_csv(final_filename, index=False)
+
+print(f"\nPhase 2 (V2) Complete! Mathematical database '{final_filename}' successfully generated.")

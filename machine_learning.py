@@ -6,160 +6,167 @@ from sklearn.feature_selection import RFE
 from sklearn.preprocessing import StandardScaler
 
 print("=====================================================================")
-print("--- Laboratórios de IA V22 (Relatório Institucional de Wall Street) ---")
+print("--- AI Labs V22 (Institutional Quantitative Backtest) ---")
 print("=====================================================================")
 
-# 1. Carregar a MATRIZ SUPREMA
-ficheiro = "dados_finais_ml.csv"
-tabela_btc = pd.read_csv(ficheiro)
+# 1. Load the SUPREME MATRIX
+filename = "dados_finais_ml.csv"
+master_df = pd.read_csv(filename)
 
-print("A preparar os dados e o Gerente de Risco...")
-tabela_btc['MM50'] = tabela_btc['Fecho'].rolling(window=50).mean()
-tabela_btc['Fecho_3d'] = tabela_btc['Fecho'].shift(-3)
-tabela_btc['Alvo_Tendencia'] = (tabela_btc['Fecho_3d'] > tabela_btc['Fecho']).astype(int)
-tabela_btc = tabela_btc.dropna()
+print("Preparing data and the Risk Management Engine...")
+master_df['MA50'] = master_df['Close'].rolling(window=50).mean()
+# The AI aims to predict if the price will be higher 3 days from now
+master_df['Close_3d'] = master_df['Close'].shift(-3)
+master_df['Trend_Target'] = (master_df['Close_3d'] > master_df['Close']).astype(int)
+master_df = master_df.dropna()
 
-# 2. Divisão de Tempo Absoluta (A Prova Final - 400 dias)
-dias_de_prova = 400
-treino_df = tabela_btc.iloc[:-dias_de_prova]
-teste_df = tabela_btc.iloc[-dias_de_prova:]
+# 2. Absolute Time Split (The Final Test - 400 days out of sample)
+test_days = 400
+train_df = master_df.iloc[:-test_days]
+test_df = master_df.iloc[-test_days:]
 
-# 3. Remover Dados Proibidos
-colunas_proibidas = ['Data', 'Alvo', 'Alvo_Tendencia', 'Fecho_3d', 'Fecho_Amanha', 
-                     'Abertura', 'Maxima', 'Minima', 'Fecho', 'Volume', 
-                     'MM7', 'MM30', 'Volume_MM7', 'Fecho_SP500', 'MM50']
+# 3. Removing Prohibited and Leakage Data
+prohibited_columns = ['Date', 'Target', 'Trend_Target', 'Close_3d', 'Next_Day_Close', 
+                      'Open', 'High', 'Low', 'Close', 'Volume', 
+                      'MA7', 'MA30', 'Volume_MA7', 'Close_SP500', 'MA50']
 
-colunas_remover = [c for c in colunas_proibidas if c in tabela_btc.columns]
+columns_to_remove = [c for c in prohibited_columns if c in master_df.columns]
 
-X_treino = treino_df.drop(columns=colunas_remover)
-y_treino = treino_df['Alvo_Tendencia']
-X_teste = teste_df.drop(columns=colunas_remover)
-y_teste = teste_df['Alvo_Tendencia']
+X_train = train_df.drop(columns=columns_to_remove)
+y_train = train_df['Trend_Target']
+X_test = test_df.drop(columns=columns_to_remove)
+y_test = test_df['Trend_Target']
 
-# 4. Padronização
+# 4. Standardization (Crucial for Logistic Regression)
 scaler = StandardScaler()
-X_treino_escalado = scaler.fit_transform(X_treino)
-X_teste_escalado = scaler.transform(X_teste)
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
 
 # =====================================================================
-# FASE 1 & 2: O FILTRO E O CÉREBRO
+# PHASE 1 & 2: THE FILTER (RFE) AND THE BRAIN
 # =====================================================================
-jeep_base = LogisticRegression(class_weight='balanced', random_state=42)
-seletor = RFE(estimator=jeep_base, n_features_to_select=4, step=1)
-seletor.fit(X_treino_escalado, y_treino)
+base_estimator = LogisticRegression(class_weight='balanced', random_state=42)
+# Select the top 4 most powerful mathematical features
+selector = RFE(estimator=base_estimator, n_features_to_select=4, step=1)
+selector.fit(X_train_scaled, y_train)
 
-X_treino_limpo = seletor.transform(X_treino_escalado)
-X_teste_limpo = seletor.transform(X_teste_escalado)
+X_train_clean = selector.transform(X_train_scaled)
+X_test_clean = selector.transform(X_test_scaled)
 
-modelo_final = LogisticRegression(class_weight='balanced', random_state=42)
-modelo_final.fit(X_treino_limpo, y_treino)
+final_model = LogisticRegression(class_weight='balanced', random_state=42)
+final_model.fit(X_train_clean, y_train)
 
-prob_teste = modelo_final.predict_proba(X_teste_limpo)[:, 1]
-
-# =====================================================================
-# FASE 3: O GERENTE DE RISCO
-# =====================================================================
-limiar_compra = 0.54
-limiar_venda = 0.46
-
-decisao_bruta = np.where(prob_teste > limiar_compra, 1, 
-                         np.where(prob_teste < limiar_venda, -1, 0))
-
-fecho_real = teste_df['Fecho'].values
-mm50_real = teste_df['MM50'].values
-rsi_real = teste_df['RSI_14'].values
-
-decisao_final = decisao_bruta.copy()
-# Regra 1: Vetar Compras se o mercado estiver abaixo da MM50
-decisao_final = np.where((decisao_final == 1) & (fecho_real < mm50_real), 0, decisao_final)
-# Regra 2: Vetar Short se o mercado já estiver sobrevendido
-decisao_final = np.where((decisao_final == -1) & (rsi_real < 40), 0, decisao_final)
+# Get the probability that the market will go UP
+prob_test = final_model.predict_proba(X_test_clean)[:, 1]
 
 # =====================================================================
-# FASE 4: O SIMULADOR DA CONTA BANCÁRIA
+# PHASE 3: THE RISK MANAGER
 # =====================================================================
-print("A executar Simulação de Capital com Taxas Reais (0.1%)...")
+buy_threshold = 0.54
+sell_threshold = 0.46
 
-capital_inicial = 10000.0
-taxa_corretora = 0.001
+# 1 = LONG (Buy), -1 = SHORT (Sell), 0 = CASH (Hold)
+raw_decision = np.where(prob_test > buy_threshold, 1, 
+                         np.where(prob_test < sell_threshold, -1, 0))
 
-capital_robo = capital_inicial
-capital_mercado = capital_inicial
+actual_close = test_df['Close'].values
+actual_ma50 = test_df['MA50'].values
+actual_rsi = test_df['RSI_14'].values
 
-historico_robo = [capital_inicial]
-historico_mercado = [capital_inicial]
+final_decision = raw_decision.copy()
+# Rule 1: Veto Long positions if the market is below the 50-day Moving Average (Downtrend)
+final_decision = np.where((final_decision == 1) & (actual_close < actual_ma50), 0, final_decision)
+# Rule 2: Veto Short positions if the market is already heavily oversold (RSI < 40)
+final_decision = np.where((final_decision == -1) & (actual_rsi < 40), 0, final_decision)
 
-posicao_atual = 0 
-operacoes_feitas = 0
+# =====================================================================
+# PHASE 4: THE CAPITAL SIMULATOR (ACCOUNTING FOR REAL FEES)
+# =====================================================================
+print("Executing Capital Simulation with Real Trading Fees (0.1%)...")
 
-fechos_seguintes = teste_df['Fecho'].shift(-1).values
+initial_capital = 10000.0
+broker_fee = 0.001
 
-for i in range(len(decisao_final) - 1):
-    sinal = decisao_final[i]
-    preco_hoje = fecho_real[i]
-    preco_amanha = fechos_seguintes[i]
+algo_capital = initial_capital
+market_capital = initial_capital
+
+algo_history = [initial_capital]
+market_history = [initial_capital]
+
+current_position = 0 
+total_trades = 0
+
+next_closes = test_df['Close'].shift(-1).values
+
+for i in range(len(final_decision) - 1):
+    signal = final_decision[i]
+    price_today = actual_close[i]
+    price_tomorrow = next_closes[i]
     
-    retorno_dia = (preco_amanha - preco_hoje) / preco_hoje
+    daily_return = (price_tomorrow - price_today) / price_today
     
-    capital_mercado = capital_mercado * (1 + retorno_dia)
-    historico_mercado.append(capital_mercado)
+    market_capital = market_capital * (1 + daily_return)
+    market_history.append(market_capital)
     
-    if sinal != posicao_atual:
-        capital_robo = capital_robo * (1 - taxa_corretora)
-        posicao_atual = sinal
-        operacoes_feitas += 1
+    # Apply broker fee if position changes
+    if signal != current_position:
+        algo_capital = algo_capital * (1 - broker_fee)
+        current_position = signal
+        total_trades += 1
         
-    if posicao_atual == 1:
-        capital_robo = capital_robo * (1 + retorno_dia)
-    elif posicao_atual == -1:
-        capital_robo = capital_robo * (1 - retorno_dia)
+    if current_position == 1:
+        algo_capital = algo_capital * (1 + daily_return)
+    elif current_position == -1:
+        algo_capital = algo_capital * (1 - daily_return)
         
-    historico_robo.append(capital_robo)
+    algo_history.append(algo_capital)
 
 # =====================================================================
-# FASE 5: MÉTRICAS INSTITUCIONAIS (NÍVEL MIT)
+# PHASE 5: INSTITUTIONAL METRICS (MIT LEVEL)
 # =====================================================================
-# Calcular a maior queda (Drawdown) do Robô vs Mercado
-serie_robo = pd.Series(historico_robo)
-picos_robo = serie_robo.cummax()
-drawdown_robo = ((serie_robo - picos_robo) / picos_robo).min() * 100
+# Calculate Max Drawdown
+algo_series = pd.Series(algo_history)
+algo_peaks = algo_series.cummax()
+algo_drawdown = ((algo_series - algo_peaks) / algo_peaks).min() * 100
 
-serie_mercado = pd.Series(historico_mercado)
-picos_mercado = serie_mercado.cummax()
-drawdown_mercado = ((serie_mercado - picos_mercado) / picos_mercado).min() * 100
+market_series = pd.Series(market_history)
+market_peaks = market_series.cummax()
+market_drawdown = ((market_series - market_peaks) / market_peaks).min() * 100
 
-# Calcular Sharpe Ratio (Retorno sobre o Risco) - Simplificado anualizado
-retornos_diarios_robo = serie_robo.pct_change().dropna()
-sharpe_robo = (retornos_diarios_robo.mean() / retornos_diarios_robo.std()) * np.sqrt(365)
+# Calculate Annualized Sharpe Ratio
+algo_daily_returns = algo_series.pct_change().dropna()
+algo_sharpe = (algo_daily_returns.mean() / algo_daily_returns.std()) * np.sqrt(365)
 
 print("\n=================================================")
-print(" RELATÓRIO INSTITUCIONAL FINAL (400 DIAS):")
-print(f" -> Orçamento Inicial:    ${capital_inicial:,.2f}")
+print(" INSTITUTIONAL BACKTEST REPORT (400 DAYS):")
+print(f" -> Initial Budget:      ${initial_capital:,.2f}")
 print("-------------------------------------------------")
-print(f" -> Investidor Comum:     ${capital_mercado:,.2f}")
-print(f" -> Robô CryptoMind (IA): ${capital_robo:,.2f}")
+print(f" -> Retail Investor:     ${market_capital:,.2f}")
+print(f" -> CryptoMind AI:       ${algo_capital:,.2f}")
 print("-------------------------------------------------")
-print(" ANÁLISE DE RISCO (O que os fundos querem ver):")
-print(f" -> Pior Queda do Mercado (Max Drawdown): {drawdown_mercado:.2f}% (Destrutivo)")
-print(f" -> Pior Queda da IA (Max Drawdown):      {drawdown_robo:.2f}% (Controlado)")
-print(f" -> Sharpe Ratio da IA:                   {sharpe_robo:.2f} (Maior que 1 é excelente!)")
-print(f" -> Total de Transações:                  {operacoes_feitas} (Taxas pagas)")
+print(" RISK ANALYSIS (What Hedge Funds care about):")
+print(f" -> Market Max Drawdown: {market_drawdown:.2f}% (Destructive)")
+print(f" -> AI Max Drawdown:     {algo_drawdown:.2f}% (Controlled Risk)")
+print(f" -> AI Sharpe Ratio:     {algo_sharpe:.2f} (>1 is excellent!)")
+print(f" -> Total Trades Executed: {total_trades} (Fees paid)")
 print("=================================================")
 
-# Gráfico
-datas_grafico = teste_df['Data'].iloc[:] # Pega todas as datas para alinhar com a lista inicializada
+# Plotting the Final Simulation Chart
+chart_dates = test_df['Date'].iloc[:]
 
 plt.figure(figsize=(14, 7))
-plt.plot(datas_grafico.values, historico_mercado, label='Mercado (Comprar e Segurar)', color='red', alpha=0.5, linewidth=2)
-plt.plot(datas_grafico.values, historico_robo, label='Robô CryptoMind (Capital)', color='green', linewidth=3)
-plt.axhline(y=capital_inicial, color='black', linestyle='-', alpha=0.8, linewidth=1.5, label='Orçamento Inicial ($10k)')
+plt.plot(chart_dates.values, market_history, label='Market (Buy & Hold)', color='red', alpha=0.5, linewidth=2)
+plt.plot(chart_dates.values, algo_history, label='CryptoMind AI (Capital)', color='green', linewidth=3)
+plt.axhline(y=initial_capital, color='black', linestyle='-', alpha=0.8, linewidth=1.5, label='Initial Budget ($10k)')
 
-plt.title('Evolução do Capital ($): Robô vs Mercado com Métricas de Risco', fontsize=16, fontweight='bold')
-plt.ylabel('Saldo na Conta (USD)', fontsize=12)
-plt.xlabel('Linha do Tempo', fontsize=12)
+plt.title('Capital Evolution ($): CryptoMind AI vs Market with Risk Metrics', fontsize=16, fontweight='bold')
+plt.ylabel('Account Balance (USD)', fontsize=12)
+plt.xlabel('Timeline', fontsize=12)
 plt.legend()
 plt.grid(True, linestyle='--', alpha=0.6)
-plt.xticks(ticks=range(0, len(datas_grafico), 30), rotation=45)
+plt.xticks(ticks=range(0, len(chart_dates), 30), rotation=45)
 plt.tight_layout()
 
+# Save the chart automatically for the GitHub README
+plt.savefig('Gráfico de simulação.png', dpi=300)
 plt.show()

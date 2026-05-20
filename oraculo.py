@@ -5,97 +5,97 @@ from sklearn.feature_selection import RFE
 from sklearn.preprocessing import StandardScaler
 import warnings
 
-# Esconder avisos matemáticos chatos do terminal para ficar limpo
+# Hide non-critical math warnings from the terminal output
 warnings.filterwarnings('ignore') 
 
 print("=====================================================")
-print(" 🔮 ORÁCULO CRYPTOMIND - SINAL QUANTITATIVO AO VIVO 🔮 ")
+print(" 🔮 CRYPTOMIND ORACLE - LIVE QUANTITATIVE SIGNAL 🔮 ")
 print("=====================================================")
 
-# 1. Carregar a Base de Dados
-tabela_btc = pd.read_csv("dados_finais_ml.csv")
+# 1. Load the Supreme Database
+master_df = pd.read_csv("dados_finais_ml.csv")
 
-# 2. Recriar o Gerente de Risco (MM50) ANTES de apagar linhas
-tabela_btc['MM50'] = tabela_btc['Fecho'].rolling(window=50).mean()
+# 2. Re-establish the Risk Manager (MA50) BEFORE dropping any rows
+master_df['MA50'] = master_df['Close'].rolling(window=50).mean()
 
-# 3. ISOLAR O DIA DE HOJE (A última linha do ficheiro)
-# Nós precisamos separar o "Hoje" antes de treinar, porque o "Hoje" não tem 
-# o alvo do futuro (obviamente, nós não sabemos o preço de amanhã ainda!)
-hoje_df = tabela_btc.iloc[[-1]].copy()
+# 3. ISOLATE "TODAY" (The very last row of the dataset)
+# We must isolate 'Today' before training because 'Today' does not have 
+# the future target yet (we cannot know tomorrow's price today).
+today_df = master_df.iloc[[-1]].copy()
 
-data_hoje = hoje_df['Data'].values[0]
-preco_hoje = hoje_df['Fecho'].values[0]
-rsi_hoje = hoje_df['RSI_14'].values[0]
-mm50_hoje = hoje_df['MM50'].values[0]
+date_today = today_df['Date'].values[0]
+price_today = today_df['Close'].values[0]
+rsi_today = today_df['RSI_14'].values[0]
+ma50_today = today_df['MA50'].values[0]
 
-# 4. PREPARAR O PASSADO PARA TREINAR A IA RÁPIDO
-# O Alvo é a tendência de 3 dias
-tabela_btc['Fecho_3d'] = tabela_btc['Fecho'].shift(-3)
-tabela_btc['Alvo_Tendencia'] = (tabela_btc['Fecho_3d'] > tabela_btc['Fecho']).astype(int)
+# 4. PREPARE HISTORICAL DATA FOR RAPID AI TRAINING
+# The target is the 3-day trend direction
+master_df['Close_3d'] = master_df['Close'].shift(-3)
+master_df['Trend_Target'] = (master_df['Close_3d'] > master_df['Close']).astype(int)
 
-# O "Treino" é tudo o que tem resposta (sem NaN)
-treino_df = tabela_btc.dropna()
+# The 'Training Set' is everything that has a known target answer (no NaN)
+train_df = master_df.dropna()
 
-# Remover as colunas que a máquina não pode ver
-colunas_proibidas = ['Data', 'Alvo', 'Alvo_Tendencia', 'Fecho_3d', 'Fecho_Amanha', 
-                     'Abertura', 'Maxima', 'Minima', 'Fecho', 'Volume', 
-                     'MM7', 'MM30', 'Volume_MM7', 'Fecho_SP500', 'MM50']
+# Remove data that the machine cannot see (preventing Data Leakage)
+prohibited_columns = ['Date', 'Target', 'Trend_Target', 'Close_3d', 'Next_Day_Close', 
+                      'Open', 'High', 'Low', 'Close', 'Volume', 
+                      'MA7', 'MA30', 'Volume_MA7', 'Close_SP500', 'MA50']
 
-colunas_remover = [c for c in colunas_proibidas if c in treino_df.columns]
+columns_to_remove = [c for c in prohibited_columns if c in train_df.columns]
 
-X_treino = treino_df.drop(columns=colunas_remover)
-y_treino = treino_df['Alvo_Tendencia']
+X_train = train_df.drop(columns=columns_to_remove)
+y_train = train_df['Trend_Target']
 
-# A pergunta para o Oráculo (O dia de Hoje, apagar apenas o que existe hoje)
-colunas_remover_hoje = [c for c in colunas_proibidas if c in hoje_df.columns]
-X_hoje = hoje_df.drop(columns=colunas_remover_hoje)
+# The prompt for the Oracle (Today's data, dropping only the prohibited columns present today)
+columns_to_remove_today = [c for c in prohibited_columns if c in today_df.columns]
+X_today = today_df.drop(columns=columns_to_remove_today)
 
-# 5. PADRONIZAÇÃO
+# 5. STANDARDIZATION
 scaler = StandardScaler()
-X_treino_escalado = scaler.fit_transform(X_treino)
-X_hoje_escalado = scaler.transform(X_hoje)
+X_train_scaled = scaler.fit_transform(X_train)
+X_today_scaled = scaler.transform(X_today)
 
-# 6. O FILTRO DE ELITE (RFE)
-print("-> A auditar o passado e afiar o modelo...")
-jeep_base = LogisticRegression(class_weight='balanced', random_state=42)
-seletor = RFE(estimator=jeep_base, n_features_to_select=4, step=1)
-seletor.fit(X_treino_escalado, y_treino)
+# 6. THE ELITE FILTER (RFE)
+print("-> Auditing history and sharpening the algorithmic model...")
+base_estimator = LogisticRegression(class_weight='balanced', random_state=42)
+selector = RFE(estimator=base_estimator, n_features_to_select=4, step=1)
+selector.fit(X_train_scaled, y_train)
 
-X_treino_limpo = seletor.transform(X_treino_escalado)
-X_hoje_limpo = seletor.transform(X_hoje_escalado)
+X_train_clean = selector.transform(X_train_scaled)
+X_today_clean = selector.transform(X_today_scaled)
 
-# 7. O TREINO E A PREVISÃO DO FUTURO
-modelo_final = LogisticRegression(class_weight='balanced', random_state=42)
-modelo_final.fit(X_treino_limpo, y_treino)
+# 7. TRAINING AND LIVE PREDICTION
+final_model = LogisticRegression(class_weight='balanced', random_state=42)
+final_model.fit(X_train_clean, y_train)
 
-# A IA cospe a probabilidade matemática do Bitcoin subir nos próximos 3 dias
-probabilidade_alta = modelo_final.predict_proba(X_hoje_limpo)[0][1]
+# The AI calculates the mathematical probability of Bitcoin rising in the next 3 days
+probability_up = final_model.predict_proba(X_today_clean)[0][1]
 
-# 8. O GERENTE DE RISCO E O VEREDICTO FINAL
-limiar_compra = 0.54
-limiar_venda = 0.46
+# 8. RISK MANAGER AND FINAL VERDICT
+buy_threshold = 0.54
+sell_threshold = 0.46
 
-veredito = "[ MANTER EM DÓLAR (CASH) - Aguardar oportunidade mais clara ]"
+verdict = "[ HOLD CASH - Awaiting a clearer statistical edge ]"
 
-if probabilidade_alta > limiar_compra:
-    if preco_hoje < mm50_hoje:
-        veredito = "[ VETADO PELO GERENTE ] A IA queria Comprar, mas o preço está abaixo da Média 50d."
+if probability_up > buy_threshold:
+    if price_today < ma50_today:
+        verdict = "[ VETOED BY RISK MANAGER ] AI suggested LONG, but price is below the 50-day MA."
     else:
-        veredito = "[ COMPRAR BITCOIN (LONG) - Tendência de Alta Detetada ]"
-elif probabilidade_alta < limiar_venda:
-    if rsi_hoje < 40:
-        veredito = "[ VETADO PELO GERENTE ] A IA queria Vender (Short), mas o mercado já sangrou muito (RSI baixo)."
+        verdict = "[ EXECUTE LONG (BUY) - Uptrend Probability Detected ]"
+elif probability_up < sell_threshold:
+    if rsi_today < 40:
+        verdict = "[ VETOED BY RISK MANAGER ] AI suggested SHORT, but market is severely oversold (Low RSI)."
     else:
-        veredito = "[ APOSTAR NA QUEDA (SHORT) - Tendência de Baixa Detetada ]"
+        verdict = "[ EXECUTE SHORT (SELL) - Downtrend Probability Detected ]"
 
-# 9. IMPRIMIR O RELATÓRIO DO ORÁCULO
+# 9. PRINT THE ORACLE REPORT
 print("\n-----------------------------------------------------")
-print(f" RESUMO DO MERCADO ({data_hoje}):")
+print(f" LIVE MARKET SUMMARY ({date_today}):")
 print("-----------------------------------------------------")
-print(f" -> Preço do Bitcoin:       ${preco_hoje:,.2f}")
-print(f" -> Média de 50 Dias:       ${mm50_hoje:,.2f}")
-print(f" -> Exaustão Global (RSI):  {rsi_hoje:.2f}")
-print(f" -> Probabilidade (IA):     {probabilidade_alta * 100:.2f}% de chance de Alta")
+print(f" -> Current BTC Price:      ${price_today:,.2f}")
+print(f" -> 50-Day Moving Average:  ${ma50_today:,.2f}")
+print(f" -> Market Exhaustion (RSI):{rsi_today:.2f}")
+print(f" -> AI Bull Probability:    {probability_up * 100:.2f}% chance of Uptrend")
 print("=====================================================")
-print(f" 🤖 ORDEM OFICIAL: {veredito}")
+print(f" 🤖 OFFICIAL ORDER: {verdict}")
 print("=====================================================\n")
