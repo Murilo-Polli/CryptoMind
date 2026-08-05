@@ -1,0 +1,36 @@
+name: CryptoMind Daily Trader
+
+on:
+  schedule:
+    - cron: '0 22 * * *' # Roda todos os dias às 22:00 (UTC)
+  workflow_dispatch: # Cria um botão mágico para rodar manualmente quando quiser!
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Puxar o Código do Repositório
+      uses: actions/checkout@v3
+
+    - name: Preparar o Python (O Cérebro)
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Instalar a Caixa de Ferramentas (Bibliotecas)
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas numpy scikit-learn python-dotenv python-binance
+
+    - name: Acordar o Oráculo (Executar o Pipeline)
+      env:
+        BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+        BINANCE_SECRET_KEY: ${{ secrets.BINANCE_SECRET_KEY }}
+      run: |
+        python Extractor_Binance.py
+        python coletor_macro.py
+        python Engenharia_dados.py
+        python engenharia_macro.py
+        python machine_learning.py
+        python oraculo.py
