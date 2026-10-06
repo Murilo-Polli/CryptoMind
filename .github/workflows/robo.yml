@@ -21,7 +21,7 @@ jobs:
     - name: Instalar a Caixa de Ferramentas (Bibliotecas)
       run: |
         python -m pip install --upgrade pip
-        pip install pandas numpy scikit-learn python-dotenv python-binance yfinance
+        pip install pandas numpy scikit-learn python-dotenv python-binance yfinance matplotlib
 
     - name: Acordar o Oráculo (Executar o Pipeline)
       env:
