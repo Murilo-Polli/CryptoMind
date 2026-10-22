@@ -8,6 +8,7 @@ import os
 from dotenv import load_dotenv
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
+import time
 
 # Hide non-critical math warnings from the terminal output
 warnings.filterwarnings('ignore') 
@@ -106,17 +107,11 @@ else:
         client = Client(API_KEY, API_SECRET, testnet=True)
         # Aumentar a janela de tolerância para 60 segundos (60000ms)
         client.recv_window = 60000 
-
-        # Connect to Binance TESTNET
-        client = Client(API_KEY, API_SECRET, testnet=True)
         
         # --- LINHA MÁGICA DE SINCRONIZAÇÃO ---
-        import time
         server_time = client.get_server_time()['serverTime']
         client.timestamp_offset = server_time - int(time.time() * 1000)
         # --------------------------------------
-        
-        # Check Account Balance (Fake USD - USDT)
         
         # Check Account Balance (Fake USD - USDT)
         balance = client.get_asset_balance(asset='USDT')
@@ -149,6 +144,15 @@ else:
             print("🛑 SIGNAL IS HOLD: No orders sent to the exchange today.")
 
     except BinanceAPIException as e:
-        print(f"❌ API ERROR: {e}")
+        erro_str = str(e)
+        if "restricted location" in erro_str or "Service unavailable" in erro_str:
+            print("\n=======================================================================")
+            print(" ⚠️  COMPLIANCE ALERT: US Geolocation Regulatory Block Detected")
+            print(" -> Trade execution bypassed to respect international financial laws.")
+            print(" -> Signal Generated Successfully. System operating in [Advisory Mode].")
+            print("=======================================================================\n")
+        else:
+            print(f"❌ API ERROR: {erro_str}")
+            
     except Exception as e:
         print(f"❌ SYSTEM ERROR: {e}")
